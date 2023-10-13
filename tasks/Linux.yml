@@ -69,8 +69,7 @@
       - "--acceptteeeula"
       - "--url '{{ az_devops_server_url }}'"
       - "--work '{{ az_devops_work_folder }}'"
-      - "--auth PAT"
-      - "--token '{{ az_devops_accesstoken }}'"
+      - "--auth '{{ az_devops_auth_type }}'"
       - "--runasservice"
     build_agent_cmd_args:
       - "--pool '{{ az_devops_agent_pool_name }}'"
@@ -84,6 +83,10 @@
       - "--environmentname '{{ az_devops_environment_name }}'"
       - "--agent '{{ az_devops_agent_name }}'"
       - "--projectname '{{ az_devops_project_name }}'"
+    agent_remove_args:
+      - "./config.sh"
+      - "remove"
+      - "--auth '{{ az_devops_auth_type }}'"
     service_is_installed: "{{ svc_status.stdout is defined and svc_status.stdout is not regex('not installed') }}"
     service_is_running: "{{ svc_status.stdout is defined and svc_status.stdout is regex('active \\(running\\)') }}"
     is_requested_version: "{{ bin_agent_listener.stat.exists and agent_listener_version.stdout is defined and agent_listener_version.stdout == az_devops_agent_version }}"
@@ -98,6 +101,24 @@
       ['--addDeploymentGroupTags', '--deploymentGroupTags \\'{{ az_devops_deployment_group_tags }}\\'']"
   when:
     - az_devops_deployment_group_tags is defined
+
+- name: Add token param when auth is PAT
+  set_fact:
+    agent_cmd_args: "{{ agent_cmd_args }} +
+      ['--token \\'{{ az_devops_accesstoken }}\\'']"
+    agent_remove_args: "{{ agent_remove_args }} +
+      ['--token \\'{{ az_devops_accesstoken }}\\'']"
+  when:
+    - az_devops_auth_type == "PAT"
+
+- name: Add SP params when auth is SP
+  set_fact:
+    agent_cmd_args: "{{ agent_cmd_args }} +
+      ['--clientid \\'{{ az_devops_client_id }}\\'', '--clientsecret \\'{{ az_devops_client_secret }}\\'', '--tenantid \\'{{ az_devops_tenantid }}\\'']"
+    agent_remove_args: "{{ agent_remove_args }} +
+      ['--clientid \\'{{ az_devops_client_id }}\\'', '--clientsecret \\'{{ az_devops_client_secret }}\\'', '--tenantid \\'{{ az_devops_tenantid }}\\'']"
+  when:
+    - az_devops_auth_type == "SP"
 
 - name: Set proxy
   set_fact:
@@ -127,7 +148,7 @@
     - reconfigure_or_replace
 
 - name: Unconfigure agent
-  command: "./config.sh remove --auth PAT --token {{ az_devops_accesstoken }}"
+  command: "{{ agent_remove_args | join(' ') }}"
   args:
     chdir: "{{ az_devops_agent_folder }}"
     removes: "{{ az_devops_agent_folder }}/.agent"
